@@ -1,0 +1,34 @@
+# 추천 설교·추천 찬양·성경 이야기 JSON을 GitHub 웹에서 고쳐 푸시하면
+# Firebase Storage 버킷(앱이 읽는 곳)에도 자동으로 올린다.
+# 인증은 Workload Identity(키 없음) — GCP 프로젝트 bible-hymn-plus의 feeds-publisher 서비스 계정.
+name: Publish feeds to Firebase Storage
+
+on:
+  push:
+    branches: [main]
+    paths: ['sermons.json', 'praise.json', 'stories.json']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JSON
+        run: |
+          for f in sermons.json praise.json stories.json; do
+            node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" && echo "ok $f"
+          done
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/414006764174/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: feeds-publisher@bible-hymn-plus.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Upload feeds
+        run: |
+          gcloud storage cp sermons.json praise.json stories.json gs://bible-hymn-plus-media/ \
+            --cache-control="public, max-age=300"
